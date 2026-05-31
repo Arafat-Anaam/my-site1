@@ -1,0 +1,3460 @@
+# المرحلة الثامنة: DevOps, CI/CD & Infrastructure
+## البنية التحتية بمستوى Google و Netflix
+
+> **مقدمة حرجة:**
+> الفرق بين شركة تنشر تحديثاً كل 3 شهور (مع توقف 4 ساعات)، وشركة تنشر 100 تحديث يومياً (بدون توقف ثانية واحدة)، ليس في عدد المطورين. **هو في البنية التحتية و DevOps**.
+>
+> ستتعلم هنا كيف تبني نظاماً **يُنشر تلقائياً، يُراقَب لحظياً، يتعافى ذاتياً، ويتوسع تلقائياً** حسب الحمل. هذه المرحلة هي التي تحوّل المشروع من "كود يعمل" إلى **منتج إنتاجي حقيقي**.
+
+---
+
+## خارطة المرحلة الثامنة
+
+```
+1.  فلسفة DevOps و SRE
+2.  Infrastructure as Code (IaC)
+3.  Terraform بالتعمق
+4.  Pulumi كبديل حديث
+5.  Configuration Management (Ansible)
+6.  Containerization (Docker)
+7.  Docker Compose للتطوير
+8.  Container Registries
+9.  Kubernetes الأساسيات
+10. K3s و K8s للحالات المختلفة
+11. Helm Charts
+12. Service Mesh (Istio)
+13. CI/CD Pipelines
+14. GitHub Actions بالتعمق
+15. GitOps (ArgoCD)
+16. Database Migrations في الإنتاج
+17. Zero-Downtime Deployments
+18. Blue-Green Deployments
+19. Canary Releases
+20. Feature Flags
+21. A/B Testing Infrastructure
+22. Multi-Region Deployment
+23. CDN و Edge Computing
+24. Monitoring (Prometheus + Grafana)
+25. Logging (ELK / Loki)
+26. Distributed Tracing (OpenTelemetry)
+27. Alerting (AlertManager + PagerDuty)
+28. SLO/SLI/SLA Management
+29. Cost Optimization (FinOps)
+30. Chaos Engineering
+31. Backup & Recovery Automation
+32. Secret Management في CI/CD
+33. Compliance as Code
+```
+
+---
+
+## 1. فلسفة DevOps و SRE
+
+### 1.1 الفجوة التاريخية
+
+```
+قبل DevOps:
+  Developers ──── يكتبون كود ──→ يرمونه على الحائط
+                                         ▼
+  Operations ──── يحاولون تشغيله ──→ يفشل في الإنتاج
+                                         ▼
+                  لوم متبادل، صراع، بطء، حوادث
+```
+
+### 1.2 فلسفة DevOps
+
+> **Development + Operations = فريق واحد، هدف واحد، أدوات واحدة.**
+
+#### المبادئ الأساسية (CALMS)
+
+| Letter | المعنى |
+|--------|------|
+| **C**ulture | ثقافة التعاون |
+| **A**utomation | كل ما يمكن أتمتته، يُؤتمت |
+| **L**ean | تقليل الـ waste |
+| **M**easurement | كل شيء يُقاس |
+| **S**haring | معرفة مشتركة |
+
+### 1.3 SRE (Site Reliability Engineering)
+
+> ابتكرته Google. **"المشغّلون يكتبون كود لأتمتة عملهم."**
+
+#### مبادئ SRE
+1. **Embrace Risk** - 100% reliability مستحيلة ومكلفة
+2. **Service Level Objectives** - حدد ما هو مقبول
+3. **Eliminate Toil** - أتمت العمل المتكرر
+4. **Monitor Everything**
+5. **Automate** - الإنسان للقرارات، الآلة للتنفيذ
+6. **Release Engineering** - النشر علم
+7. **Simplicity** - البساطة = موثوقية
+
+### 1.4 المقاييس الذهبية لـ DevOps (DORA)
+
+| المقياس | Elite | High | Medium | Low |
+|--------|------|------|--------|-----|
+| **Deployment Frequency** | عدة مرات/يوم | يومياً-أسبوعياً | شهرياً | كل عدة شهور |
+| **Lead Time for Changes** | <1 ساعة | <1 يوم | <1 شهر | >1 شهر |
+| **MTTR** | <1 ساعة | <1 يوم | <1 يوم | >1 أسبوع |
+| **Change Failure Rate** | 0-15% | 16-30% | 16-30% | 16-30% |
+
+**هدفنا**: Elite في كل المقاييس خلال سنتين.
+
+### 1.5 فلسفة "Cattle, not Pets"
+
+```
+Pets (الطريقة القديمة):
+  - كل سيرفر له اسم (db01, web-main)
+  - يُعتنى به يدوياً
+  - لو مرض، يُعالج
+  - فقده كارثة
+
+Cattle (الطريقة الحديثة):
+  - السيرفرات أرقام (instance-a4f29)
+  - تُدار آلياً
+  - لو مرض، يُذبح ويُستبدل
+  - الفقد عادي ومتوقع
+```
+
+---
+
+## 2. Infrastructure as Code (IaC)
+
+### 2.1 الفكرة
+
+> **كل البنية التحتية (سيرفرات، شبكات، قواعد بيانات، DNS، صلاحيات) تُعرَّف بكود نصي، يُحفظ في Git، يُراجَع كمرفع.**
+
+### 2.2 الفوائد
+
+```
+1. Repeatability    - إعادة إنشاء البيئة بالضبط
+2. Version Control  - تاريخ التغييرات
+3. Code Review      - كل تغيير يُراجَع
+4. Testing          - اختبار البنية
+5. Disaster Recovery - إعادة بناء كل شيء بكبسة زر
+6. Documentation    - الكود = التوثيق
+7. Cost             - حذف الموارد بسهولة
+```
+
+### 2.3 الفئات
+
+| الفئة | الأمثلة |
+|------|--------|
+| **Provisioning** | Terraform, Pulumi, CloudFormation |
+| **Configuration** | Ansible, Chef, Puppet |
+| **Image Building** | Packer, Docker |
+| **Orchestration** | Kubernetes, Docker Swarm |
+
+### 2.4 Declarative vs Imperative
+
+```python
+# Imperative - "كيف"
+create_vm("vm-1")
+create_vm("vm-2")
+attach_disk("vm-1", "disk-1")
+configure_network("vm-1", "10.0.1.5")
+
+# Declarative - "ماذا"
+resources:
+  vms:
+    - name: vm-1
+      disk: disk-1
+      ip: 10.0.1.5
+    - name: vm-2
+
+# الأداة تكتشف الفرق وتطبّقه
+```
+
+> **القاعدة**: Declarative دائماً عندما أمكن.
+
+---
+
+## 3. Terraform بالتعمق
+
+### 3.1 لماذا Terraform؟
+
+```
+- يدعم 1500+ provider (AWS, Azure, GCP, Cloudflare, Datadog, ...)
+- Declarative
+- مجاني (HCL syntax)
+- State management
+- Plan قبل Apply
+- المعيار الصناعي
+```
+
+### 3.2 المكونات الأساسية
+
+```hcl
+# providers.tf
+terraform {
+  required_version = ">= 1.6"
+  
+  required_providers {
+    aws = {
+      source  = "hashicorp/aws"
+      version = "~> 5.0"
+    }
+  }
+  
+  backend "s3" {
+    bucket         = "myapp-terraform-state"
+    key            = "production/terraform.tfstate"
+    region         = "me-south-1"
+    encrypt        = true
+    dynamodb_table = "terraform-lock"
+  }
+}
+
+provider "aws" {
+  region = var.aws_region
+  
+  default_tags {
+    tags = {
+      Project     = "MyAccountingApp"
+      Environment = var.environment
+      ManagedBy   = "Terraform"
+    }
+  }
+}
+```
+
+### 3.3 Variables و Outputs
+
+```hcl
+# variables.tf
+variable "environment" {
+  description = "البيئة (dev, staging, production)"
+  type        = string
+  
+  validation {
+    condition     = contains(["dev", "staging", "production"], var.environment)
+    error_message = "Environment must be dev, staging, or production."
+  }
+}
+
+variable "instance_count" {
+  description = "عدد الـ instances"
+  type        = number
+  default     = 2
+}
+
+variable "tags" {
+  description = "Tags إضافية"
+  type        = map(string)
+  default     = {}
+}
+
+# outputs.tf
+output "database_endpoint" {
+  description = "نقطة اتصال DB"
+  value       = aws_db_instance.main.endpoint
+  sensitive   = false
+}
+
+output "database_password" {
+  value     = random_password.db.result
+  sensitive = true
+}
+```
+
+### 3.4 Modules - إعادة الاستخدام
+
+```hcl
+# modules/vpc/main.tf
+resource "aws_vpc" "main" {
+  cidr_block           = var.cidr_block
+  enable_dns_hostnames = true
+  enable_dns_support   = true
+  
+  tags = merge(var.tags, {
+    Name = "${var.name}-vpc"
+  })
+}
+
+resource "aws_subnet" "public" {
+  count             = length(var.availability_zones)
+  vpc_id            = aws_vpc.main.id
+  cidr_block        = cidrsubnet(var.cidr_block, 8, count.index)
+  availability_zone = var.availability_zones[count.index]
+  
+  map_public_ip_on_launch = true
+  
+  tags = {
+    Name = "${var.name}-public-${count.index}"
+    Tier = "public"
+  }
+}
+
+resource "aws_subnet" "private" {
+  count             = length(var.availability_zones)
+  vpc_id            = aws_vpc.main.id
+  cidr_block        = cidrsubnet(var.cidr_block, 8, count.index + 10)
+  availability_zone = var.availability_zones[count.index]
+  
+  tags = {
+    Name = "${var.name}-private-${count.index}"
+    Tier = "private"
+  }
+}
+
+# الاستخدام
+module "production_vpc" {
+  source = "./modules/vpc"
+  
+  name               = "production"
+  cidr_block         = "10.0.0.0/16"
+  availability_zones = ["me-south-1a", "me-south-1b", "me-south-1c"]
+  
+  tags = {
+    Environment = "production"
+  }
+}
+```
+
+### 3.5 مثال: بنية تحتية كاملة
+
+```hcl
+# main.tf - بنية كاملة لـ production
+module "vpc" {
+  source = "./modules/vpc"
+  name   = "${var.environment}-vpc"
+  # ...
+}
+
+# Database
+module "database" {
+  source = "./modules/rds"
+  
+  identifier      = "${var.environment}-db"
+  engine          = "postgres"
+  engine_version  = "16.1"
+  instance_class  = var.environment == "production" ? "db.r6g.xlarge" : "db.t4g.medium"
+  
+  allocated_storage     = 100
+  max_allocated_storage = 1000
+  storage_encrypted     = true
+  kms_key_id           = aws_kms_key.db.arn
+  
+  multi_az = var.environment == "production"
+  
+  backup_retention_period = 30
+  backup_window           = "03:00-04:00"
+  
+  vpc_security_group_ids = [module.db_security_group.id]
+  db_subnet_group_name   = module.vpc.db_subnet_group
+  
+  performance_insights_enabled = true
+  monitoring_interval          = 60
+  
+  deletion_protection = var.environment == "production"
+}
+
+# Cache
+module "redis" {
+  source = "./modules/elasticache"
+  
+  cluster_id      = "${var.environment}-redis"
+  node_type       = "cache.r6g.large"
+  num_cache_nodes = 3
+  
+  automatic_failover_enabled = true
+  multi_az_enabled           = true
+  
+  at_rest_encryption_enabled = true
+  transit_encryption_enabled = true
+}
+
+# Kubernetes
+module "eks" {
+  source = "./modules/eks"
+  
+  cluster_name    = "${var.environment}-eks"
+  cluster_version = "1.28"
+  
+  vpc_id     = module.vpc.id
+  subnet_ids = module.vpc.private_subnet_ids
+  
+  node_groups = {
+    general = {
+      instance_types = ["t4g.large"]
+      min_size      = 2
+      max_size      = 10
+      desired_size  = 3
+    }
+    
+    workers = {
+      instance_types = ["t4g.medium"]
+      min_size      = 1
+      max_size      = 20
+      desired_size  = 2
+      
+      taints = [{
+        key    = "workload"
+        value  = "batch"
+        effect = "NO_SCHEDULE"
+      }]
+    }
+  }
+}
+
+# Storage
+resource "aws_s3_bucket" "uploads" {
+  bucket = "${var.environment}-uploads-${random_id.bucket_suffix.hex}"
+}
+
+resource "aws_s3_bucket_versioning" "uploads" {
+  bucket = aws_s3_bucket.uploads.id
+  
+  versioning_configuration {
+    status = "Enabled"
+  }
+}
+
+resource "aws_s3_bucket_server_side_encryption_configuration" "uploads" {
+  bucket = aws_s3_bucket.uploads.id
+  
+  rule {
+    apply_server_side_encryption_by_default {
+      sse_algorithm     = "aws:kms"
+      kms_master_key_id = aws_kms_key.s3.arn
+    }
+  }
+}
+
+# DNS
+resource "aws_route53_record" "api" {
+  zone_id = data.aws_route53_zone.main.zone_id
+  name    = "api.${var.environment}.${var.domain}"
+  type    = "A"
+  
+  alias {
+    name                   = module.load_balancer.dns_name
+    zone_id                = module.load_balancer.zone_id
+    evaluate_target_health = true
+  }
+}
+```
+
+### 3.6 Terraform Workflow
+
+```bash
+# 1. تهيئة (أول مرة)
+terraform init
+
+# 2. تخطيط (يُظهر ماذا سيتغير)
+terraform plan -out=tfplan
+
+# 3. مراجعة (بشري)
+# ... فريق يراجع الخطة ...
+
+# 4. تطبيق
+terraform apply tfplan
+
+# 5. تدمير (للبيئات المؤقتة)
+terraform destroy
+```
+
+### 3.7 State Management
+
+> **الـ State هو ذاكرة Terraform**. يجب حمايته.
+
+```hcl
+# Remote state على S3 مع قفل عبر DynamoDB
+backend "s3" {
+  bucket         = "terraform-state"
+  key            = "production/terraform.tfstate"
+  region         = "me-south-1"
+  encrypt        = true
+  dynamodb_table = "terraform-lock"     # منع تعديل متزامن
+}
+```
+
+### 3.8 Workspaces للبيئات
+
+```bash
+# إنشاء workspaces
+terraform workspace new dev
+terraform workspace new staging
+terraform workspace new production
+
+# التبديل
+terraform workspace select staging
+
+# في الكود
+resource "aws_instance" "app" {
+  count         = terraform.workspace == "production" ? 5 : 1
+  instance_type = terraform.workspace == "production" ? "m5.large" : "t3.micro"
+}
+```
+
+---
+
+## 4. Pulumi كبديل حديث
+
+### 4.1 الميزة
+
+> **Pulumi: نفس IaC، لكن بلغة برمجة حقيقية (TypeScript, Python, Go, C#).**
+
+### 4.2 مثال
+
+```typescript
+import * as aws from "@pulumi/aws";
+import * as awsx from "@pulumi/awsx";
+
+// VPC
+const vpc = new awsx.ec2.Vpc("main", {
+  cidrBlock: "10.0.0.0/16",
+  numberOfAvailabilityZones: 3,
+  subnets: [
+    { type: "public", cidrMask: 24 },
+    { type: "private", cidrMask: 20 }
+  ]
+});
+
+// منطق برمجي - شيء صعب في HCL
+const environments = ["dev", "staging", "production"];
+
+environments.forEach(env => {
+  const isProd = env === "production";
+  
+  new aws.rds.Instance(`db-${env}`, {
+    engine: "postgres",
+    instanceClass: isProd ? "db.r6g.xlarge" : "db.t4g.medium",
+    allocatedStorage: isProd ? 100 : 20,
+    multiAz: isProd,
+    backupRetentionPeriod: isProd ? 30 : 7
+  });
+});
+```
+
+### 4.3 متى Pulumi vs Terraform؟
+
+| الحالة | الأفضل |
+|--------|-------|
+| فريق DevOps خالص | Terraform |
+| فريق developers يديرون البنية | Pulumi |
+| منطق معقد، حلقات، شروط | Pulumi |
+| توحيد قياسي | Terraform |
+| تكاملات أكثر | Terraform |
+
+---
+
+## 5. Configuration Management (Ansible)
+
+### 5.1 ماذا يفعل Ansible؟
+
+> **بعد إنشاء السيرفر بـ Terraform، Ansible يُهيّئ ما بداخله: تثبيت برامج، إعدادات، خدمات.**
+
+### 5.2 المكونات
+
+```yaml
+# inventory.yml
+all:
+  children:
+    webservers:
+      hosts:
+        web1.example.com:
+        web2.example.com:
+      vars:
+        nginx_workers: 4
+    
+    databases:
+      hosts:
+        db1.example.com:
+      vars:
+        postgres_version: 16
+```
+
+### 5.3 Playbook مثال
+
+```yaml
+# install-postgres.yml
+- name: تثبيت PostgreSQL
+  hosts: databases
+  become: yes
+  
+  vars:
+    postgres_version: 16
+    postgres_data_dir: /var/lib/postgresql/data
+  
+  tasks:
+    - name: إضافة مستودع PostgreSQL
+      apt_repository:
+        repo: "deb http://apt.postgresql.org/pub/repos/apt {{ ansible_distribution_release }}-pgdg main"
+        state: present
+    
+    - name: تثبيت PostgreSQL
+      apt:
+        name:
+          - "postgresql-{{ postgres_version }}"
+          - "postgresql-contrib-{{ postgres_version }}"
+        state: present
+        update_cache: yes
+    
+    - name: إعداد postgresql.conf
+      template:
+        src: postgresql.conf.j2
+        dest: "/etc/postgresql/{{ postgres_version }}/main/postgresql.conf"
+        owner: postgres
+        group: postgres
+        mode: '0600'
+      notify: restart postgresql
+    
+    - name: إعداد pg_hba.conf
+      template:
+        src: pg_hba.conf.j2
+        dest: "/etc/postgresql/{{ postgres_version }}/main/pg_hba.conf"
+      notify: restart postgresql
+    
+    - name: التأكد من تشغيل PostgreSQL
+      systemd:
+        name: postgresql
+        state: started
+        enabled: yes
+    
+    - name: إنشاء قاعدة البيانات
+      community.postgresql.postgresql_db:
+        name: "{{ db_name }}"
+        encoding: UTF-8
+        lc_collate: en_US.UTF-8
+      become_user: postgres
+  
+  handlers:
+    - name: restart postgresql
+      systemd:
+        name: postgresql
+        state: restarted
+```
+
+### 5.4 Idempotency
+
+> **Ansible idempotent**: تشغيله 10 مرات = تشغيله مرة واحدة. لو الحالة المطلوبة موجودة، لا يفعل شيئاً.
+
+---
+
+## 6. Containerization (Docker)
+
+### 6.1 لماذا Containers؟
+
+```
+المشكلة القديمة:
+  "تعمل عندي" → "لا تعمل عند العميل"
+  
+الحل: Container
+  كل ما يحتاجه التطبيق (كود، dependencies، OS libs) في صندوق واحد.
+  يعمل في أي مكان بنفس الطريقة.
+```
+
+### 6.2 Container vs VM
+
+```
+Virtual Machine                  Container
+┌─────────────────┐             ┌─────────────────┐
+│   App           │             │   App           │
+├─────────────────┤             ├─────────────────┤
+│   Libs          │             │   Libs          │
+├─────────────────┤             ├─────────────────┤
+│   Guest OS      │             │ (shared kernel) │
+├─────────────────┤             ├─────────────────┤
+│   Hypervisor    │             │   Docker        │
+├─────────────────┤             ├─────────────────┤
+│   Host OS       │             │   Host OS       │
+└─────────────────┘             └─────────────────┘
+
+VM: GB من الذاكرة، دقائق للتشغيل
+Container: MB من الذاكرة، ثوانٍ للتشغيل
+```
+
+### 6.3 Dockerfile - أفضل الممارسات
+
+```dockerfile
+# ❌ سيء - حجم كبير، غير آمن
+FROM ubuntu:latest
+RUN apt-get update
+RUN apt-get install -y nodejs npm
+COPY . /app
+WORKDIR /app
+RUN npm install
+CMD npm start
+
+# ✓ جيد - multi-stage، صغير، آمن
+# المرحلة 1: Build
+FROM node:20-alpine AS builder
+WORKDIR /build
+
+# Cache الـ dependencies
+COPY package.json pnpm-lock.yaml ./
+RUN corepack enable && pnpm install --frozen-lockfile
+
+# Build
+COPY . .
+RUN pnpm build && pnpm prune --prod
+
+# المرحلة 2: Runtime
+FROM node:20-alpine AS runtime
+
+# Security: non-root user
+RUN addgroup -g 1001 nodejs && \
+    adduser -D -u 1001 -G nodejs nodejs
+
+# انسخ فقط ما نحتاجه
+WORKDIR /app
+COPY --from=builder --chown=nodejs:nodejs /build/node_modules ./node_modules
+COPY --from=builder --chown=nodejs:nodejs /build/dist ./dist
+COPY --from=builder --chown=nodejs:nodejs /build/package.json ./
+
+USER nodejs
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=3s --retries=3 \
+    CMD wget --quiet --tries=1 --spider http://localhost:3000/health || exit 1
+
+EXPOSE 3000
+
+# Signal handling صحيح
+CMD ["node", "dist/index.js"]
+```
+
+### 6.4 .dockerignore
+
+```
+node_modules
+.git
+.env
+*.log
+dist
+coverage
+.vscode
+.idea
+README.md
+```
+
+### 6.5 حجم الـ Image
+
+```bash
+# قياس
+docker images
+# myapp:v1   1.2GB     ← كبير جداً
+# myapp:v2   180MB     ← بعد التحسين
+# myapp:v3   45MB      ← مع Alpine + multi-stage + distroless
+
+# تحليل الطبقات
+docker history myapp:v3
+docker scout cves myapp:v3
+```
+
+### 6.6 Image Scanning للأمان
+
+```bash
+# Trivy
+trivy image myapp:latest
+
+# Snyk
+snyk container test myapp:latest
+
+# في CI
+- name: Scan image
+  uses: aquasecurity/trivy-action@master
+  with:
+    image-ref: 'myapp:${{ github.sha }}'
+    severity: 'CRITICAL,HIGH'
+    exit-code: '1'
+```
+
+---
+
+## 7. Docker Compose للتطوير
+
+### 7.1 الفائدة
+
+> **بأمر واحد، نُشغّل بيئة كاملة (app + db + cache + queue + monitoring).**
+
+### 7.2 مثال شامل
+
+```yaml
+# docker-compose.yml
+version: '3.9'
+
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: builder              # نستخدم stage الـ builder للتطوير
+    ports:
+      - "3000:3000"
+    environment:
+      DATABASE_URL: postgresql://user:pass@db:5432/myapp
+      REDIS_URL: redis://cache:6379
+      NODE_ENV: development
+    volumes:
+      - .:/app                      # hot reload
+      - /app/node_modules           # لا تتجاوز node_modules
+    depends_on:
+      db:
+        condition: service_healthy
+      cache:
+        condition: service_started
+    networks:
+      - app-network
+    restart: unless-stopped
+  
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: user
+      POSTGRES_PASSWORD: pass
+      POSTGRES_DB: myapp
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+      - ./db/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U user"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    networks:
+      - app-network
+  
+  cache:
+    image: redis:7-alpine
+    command: redis-server --requirepass secret
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
+    networks:
+      - app-network
+  
+  rabbitmq:
+    image: rabbitmq:3-management-alpine
+    ports:
+      - "5672:5672"               # AMQP
+      - "15672:15672"             # Management UI
+    environment:
+      RABBITMQ_DEFAULT_USER: admin
+      RABBITMQ_DEFAULT_PASS: admin
+    networks:
+      - app-network
+  
+  prometheus:
+    image: prom/prometheus:latest
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml
+    networks:
+      - app-network
+  
+  grafana:
+    image: grafana/grafana:latest
+    ports:
+      - "3001:3000"
+    environment:
+      GF_SECURITY_ADMIN_PASSWORD: admin
+    volumes:
+      - grafana-data:/var/lib/grafana
+    depends_on:
+      - prometheus
+    networks:
+      - app-network
+
+volumes:
+  postgres-data:
+  redis-data:
+  grafana-data:
+
+networks:
+  app-network:
+    driver: bridge
+```
+
+### 7.3 Profile للبيئات المختلفة
+
+```yaml
+services:
+  app:
+    profiles: ["all"]
+  
+  monitoring:
+    profiles: ["all", "monitoring"]
+  
+  debug-tools:
+    profiles: ["debug"]
+```
+
+```bash
+# تشغيل بدون monitoring
+docker-compose up
+
+# مع monitoring
+docker-compose --profile monitoring up
+
+# للتنقيح فقط
+docker-compose --profile debug up
+```
+
+---
+
+## 8. Container Registries
+
+### 8.1 الخيارات
+
+| Registry | الميزة |
+|----------|------|
+| **Docker Hub** | الأكثر شعبية، مجاني للـ public |
+| **AWS ECR** | تكامل مع AWS |
+| **Google GCR/Artifact Registry** | تكامل مع GCP |
+| **Azure ACR** | تكامل مع Azure |
+| **GitHub Container Registry** | تكامل مع GitHub |
+| **Harbor** | self-hosted، enterprise |
+
+### 8.2 أفضل ممارسات
+
+```bash
+# 1. Tagging واضح
+docker tag myapp:latest myregistry.com/myapp:1.2.3
+docker tag myapp:latest myregistry.com/myapp:1.2
+docker tag myapp:latest myregistry.com/myapp:1
+docker tag myapp:latest myregistry.com/myapp:latest
+
+# 2. Push كل tags
+docker push myregistry.com/myapp --all-tags
+
+# 3. Scan قبل النشر
+trivy image myregistry.com/myapp:1.2.3
+
+# 4. Sign للأمان (Cosign)
+cosign sign myregistry.com/myapp:1.2.3
+```
+
+### 8.3 Image Caching Strategy
+
+```dockerfile
+# الترتيب مهم! الطبقات الأقل تغييراً أولاً
+FROM node:20-alpine
+
+# 1. System dependencies (نادراً تتغير)
+RUN apk add --no-cache curl
+
+# 2. Package files (تتغير أحياناً)
+COPY package.json pnpm-lock.yaml ./
+RUN pnpm install
+
+# 3. Source code (يتغير كثيراً)
+COPY . .
+
+# هكذا، تغيير في الكود لا يُلغي cache الـ dependencies
+```
+
+---
+
+## 9-10. Kubernetes الأساسيات + K3s
+
+### 9.1 لماذا Kubernetes؟
+
+```
+Docker = تشغيل container واحد
+Kubernetes = تشغيل آلاف الـ containers على عشرات السيرفرات
+```
+
+### 9.2 المكونات الأساسية
+
+```
+┌─────────────────────────────────────────────┐
+│                Cluster                       │
+│                                              │
+│  ┌──────────────────────────────────┐       │
+│  │  Control Plane                    │       │
+│  │  - API Server                     │       │
+│  │  - Scheduler                      │       │
+│  │  - Controller Manager             │       │
+│  │  - etcd                           │       │
+│  └──────────────────────────────────┘       │
+│                                              │
+│  ┌────────────┐  ┌────────────┐             │
+│  │  Node 1    │  │  Node 2    │   ...       │
+│  │  ┌──────┐  │  │  ┌──────┐  │             │
+│  │  │ Pod  │  │  │  │ Pod  │  │             │
+│  │  ├──────┤  │  │  ├──────┤  │             │
+│  │  │ Pod  │  │  │  │ Pod  │  │             │
+│  │  └──────┘  │  │  └──────┘  │             │
+│  └────────────┘  └────────────┘             │
+└─────────────────────────────────────────────┘
+```
+
+### 9.3 الكائنات الأساسية
+
+#### Pod
+أصغر وحدة. يحتوي 1+ container.
+
+```yaml
+apiVersion: v1
+kind: Pod
+metadata:
+  name: myapp-pod
+spec:
+  containers:
+    - name: app
+      image: myapp:1.2.3
+      ports:
+        - containerPort: 3000
+      resources:
+        requests:
+          memory: "256Mi"
+          cpu: "250m"
+        limits:
+          memory: "512Mi"
+          cpu: "500m"
+```
+
+#### Deployment
+يدير عدة pods (replicas).
+
+```yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: myapp
+  labels:
+    app: myapp
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: myapp
+  
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  
+  template:
+    metadata:
+      labels:
+        app: myapp
+        version: v1.2.3
+    spec:
+      containers:
+        - name: app
+          image: myregistry.com/myapp:1.2.3
+          ports:
+            - containerPort: 3000
+          
+          env:
+            - name: DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: db-secret
+                  key: url
+          
+          resources:
+            requests:
+              memory: "256Mi"
+              cpu: "250m"
+            limits:
+              memory: "512Mi"
+              cpu: "500m"
+          
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 3000
+            initialDelaySeconds: 30
+            periodSeconds: 10
+          
+          readinessProbe:
+            httpGet:
+              path: /ready
+              port: 3000
+            initialDelaySeconds: 5
+            periodSeconds: 5
+          
+          startupProbe:
+            httpGet:
+              path: /health
+              port: 3000
+            failureThreshold: 30
+            periodSeconds: 10
+```
+
+#### Service
+ينشر pods كخدمة شبكية ثابتة.
+
+```yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: myapp-service
+spec:
+  type: ClusterIP                # داخلي
+  selector:
+    app: myapp
+  ports:
+    - port: 80
+      targetPort: 3000
+      protocol: TCP
+```
+
+#### Ingress
+يكشف الخدمات للإنترنت.
+
+```yaml
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: myapp-ingress
+  annotations:
+    cert-manager.io/cluster-issuer: letsencrypt-prod
+    nginx.ingress.kubernetes.io/rate-limit: "100"
+spec:
+  ingressClassName: nginx
+  tls:
+    - hosts:
+        - api.myapp.com
+      secretName: myapp-tls
+  rules:
+    - host: api.myapp.com
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: myapp-service
+                port:
+                  number: 80
+```
+
+#### ConfigMap & Secret
+
+```yaml
+# ConfigMap - بيانات غير حساسة
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: myapp-config
+data:
+  app.yaml: |
+    log_level: info
+    cache_ttl: 300
+  feature_flags: |
+    new_invoice_ui: true
+
+---
+# Secret - بيانات حساسة
+apiVersion: v1
+kind: Secret
+metadata:
+  name: db-secret
+type: Opaque
+data:
+  url: cG9zdGdyZXNxbDovL3VzZXI6cGFzc0BkYjo1NDMyL215YXBw  # base64
+```
+
+#### HorizontalPodAutoscaler
+
+```yaml
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: myapp-hpa
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: myapp
+  
+  minReplicas: 3
+  maxReplicas: 50
+  
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: 70
+    
+    - type: Resource
+      resource:
+        name: memory
+        target:
+          type: Utilization
+          averageUtilization: 80
+    
+    - type: Pods
+      pods:
+        metric:
+          name: http_requests_per_second
+        target:
+          type: AverageValue
+          averageValue: "1000"
+  
+  behavior:
+    scaleDown:
+      stabilizationWindowSeconds: 300
+    scaleUp:
+      stabilizationWindowSeconds: 0
+```
+
+### 10.1 K3s للحالات الصغيرة
+
+> **K3s = Kubernetes خفيف (40MB binary). مثالي لـ Edge, IoT, on-prem.**
+
+#### متى K3s vs K8s؟
+
+| K3s | K8s |
+|-----|-----|
+| Single server in restaurant | Enterprise multi-cluster |
+| Edge deployment | Cloud production |
+| Limited resources | Unlimited resources |
+| Simple ops | Full features |
+
+```bash
+# تثبيت K3s في ثانية
+curl -sfL https://get.k3s.io | sh -
+
+# kubeconfig
+sudo cat /etc/rancher/k3s/k3s.yaml
+```
+
+---
+
+## 11. Helm Charts
+
+### 11.1 المشكلة
+
+> 50 ملف YAML لـ deployment واحد. عند 100 deployment = فوضى.
+
+### 11.2 Helm Chart Structure
+
+```
+mychart/
+├── Chart.yaml              # metadata
+├── values.yaml            # default values
+├── values.production.yaml # production overrides
+├── templates/
+│   ├── deployment.yaml
+│   ├── service.yaml
+│   ├── ingress.yaml
+│   ├── configmap.yaml
+│   ├── secret.yaml
+│   └── hpa.yaml
+└── charts/                # sub-charts
+```
+
+### 11.3 Template مثال
+
+```yaml
+# templates/deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .Release.Name }}-{{ .Chart.Name }}
+  labels:
+    {{- include "mychart.labels" . | nindent 4 }}
+spec:
+  replicas: {{ .Values.replicaCount }}
+  
+  selector:
+    matchLabels:
+      {{- include "mychart.selectorLabels" . | nindent 6 }}
+  
+  template:
+    metadata:
+      labels:
+        {{- include "mychart.selectorLabels" . | nindent 8 }}
+    spec:
+      containers:
+        - name: {{ .Chart.Name }}
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          
+          ports:
+            - containerPort: {{ .Values.service.targetPort }}
+          
+          env:
+            {{- range .Values.env }}
+            - name: {{ .name }}
+              value: {{ .value | quote }}
+            {{- end }}
+          
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+```
+
+### 11.4 Values
+
+```yaml
+# values.yaml (defaults)
+replicaCount: 1
+
+image:
+  repository: myapp
+  tag: latest
+  pullPolicy: IfNotPresent
+
+service:
+  type: ClusterIP
+  port: 80
+  targetPort: 3000
+
+resources:
+  requests:
+    cpu: 100m
+    memory: 128Mi
+
+env:
+  - name: NODE_ENV
+    value: development
+```
+
+```yaml
+# values.production.yaml (override للإنتاج)
+replicaCount: 10
+
+image:
+  tag: 1.2.3
+
+resources:
+  requests:
+    cpu: 500m
+    memory: 512Mi
+  limits:
+    cpu: 2
+    memory: 2Gi
+
+env:
+  - name: NODE_ENV
+    value: production
+```
+
+### 11.5 الاستخدام
+
+```bash
+# تثبيت
+helm install myapp ./mychart -f values.production.yaml
+
+# تحديث
+helm upgrade myapp ./mychart -f values.production.yaml
+
+# rollback
+helm rollback myapp 1
+
+# قائمة الإصدارات
+helm history myapp
+
+# حذف
+helm uninstall myapp
+```
+
+---
+
+## 12. Service Mesh (Istio)
+
+### 12.1 المشكلة
+
+في microservices مع 50+ خدمة:
+- كيف نُؤمّن الاتصال بينها؟
+- كيف نراقب الـ traffic؟
+- كيف نطبّق rate limiting بدون تعديل كل خدمة؟
+- كيف نُجرّب canary deployment؟
+
+### 12.2 الحل: Service Mesh
+
+> **طبقة infrastructure تتعامل مع كل الاتصالات بين الخدمات، بدون لمس الكود.**
+
+### 12.3 المكونات
+
+```
+┌──────────────────────────────────────┐
+│  Control Plane (istiod)              │
+│  - Config Management                  │
+│  - Certificate Issuance               │
+│  - Policy Enforcement                 │
+└──────────────────────────────────────┘
+              │
+              │ configures
+              ▼
+┌──────────────────────────────────────┐
+│  Data Plane (Envoy proxies)          │
+│                                       │
+│  Service A ─[Envoy]─ ─ ─ [Envoy]─ Service B
+│                                       │
+│  Every service has a sidecar proxy   │
+└──────────────────────────────────────┘
+```
+
+### 12.4 الميزات
+
+```yaml
+# Traffic Management - Canary
+apiVersion: networking.istio.io/v1beta1
+kind: VirtualService
+metadata:
+  name: myapp
+spec:
+  hosts:
+    - myapp
+  http:
+    - match:
+        - headers:
+            user-type:
+              exact: beta-tester
+      route:
+        - destination:
+            host: myapp
+            subset: v2
+    - route:
+        - destination:
+            host: myapp
+            subset: v1
+          weight: 90
+        - destination:
+            host: myapp
+            subset: v2
+          weight: 10
+
+---
+# Security - mTLS
+apiVersion: security.istio.io/v1beta1
+kind: PeerAuthentication
+metadata:
+  name: default
+spec:
+  mtls:
+    mode: STRICT             # كل الاتصالات بـ mTLS
+
+---
+# Authorization
+apiVersion: security.istio.io/v1beta1
+kind: AuthorizationPolicy
+metadata:
+  name: myapp-policy
+spec:
+  selector:
+    matchLabels:
+      app: myapp
+  rules:
+    - from:
+        - source:
+            principals: ["cluster.local/ns/default/sa/frontend"]
+      to:
+        - operation:
+            methods: ["GET", "POST"]
+```
+
+---
+
+## 13. CI/CD Pipelines
+
+### 13.1 ما هو CI/CD؟
+
+```
+CI (Continuous Integration):
+  كل push → بناء + اختبار تلقائي
+  
+CD (Continuous Delivery):
+  CI ينجح → جاهز للنشر (بضغطة زر)
+  
+CD (Continuous Deployment):
+  CI ينجح → ينشر تلقائياً
+```
+
+### 13.2 Pipeline نموذجي
+
+```
+Push Code
+    ▼
+Lint (eslint, prettier)
+    ▼
+Unit Tests
+    ▼
+Build
+    ▼
+Integration Tests
+    ▼
+Security Scan (Snyk, Trivy)
+    ▼
+Build Container Image
+    ▼
+Push to Registry
+    ▼
+Deploy to Staging
+    ▼
+E2E Tests
+    ▼
+Performance Tests
+    ▼
+Manual Approval (للإنتاج)
+    ▼
+Deploy to Production (Canary)
+    ▼
+Monitor & Promote (or Rollback)
+```
+
+---
+
+## 14. GitHub Actions بالتعمق
+
+### 14.1 Workflow كامل للإنتاج
+
+```yaml
+# .github/workflows/ci-cd.yml
+name: CI/CD Pipeline
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main]
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}
+
+jobs:
+  # =====================
+  # 1. Code Quality
+  # =====================
+  quality:
+    name: Code Quality
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      
+      - uses: pnpm/action-setup@v2
+        with:
+          version: 8
+      
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'pnpm'
+      
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+      
+      - name: Lint
+        run: pnpm lint
+      
+      - name: Format check
+        run: pnpm format:check
+      
+      - name: Type check
+        run: pnpm typecheck
+
+  # =====================
+  # 2. Tests
+  # =====================
+  test:
+    name: Tests
+    runs-on: ubuntu-latest
+    
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: test
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 5432:5432
+      
+      redis:
+        image: redis:7
+        ports:
+          - 6379:6379
+    
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v2
+        with: { version: 8 }
+      - uses: actions/setup-node@v4
+        with: { node-version: 20, cache: 'pnpm' }
+      
+      - run: pnpm install --frozen-lockfile
+      
+      - name: Unit tests
+        run: pnpm test:unit --coverage
+      
+      - name: Integration tests
+        run: pnpm test:integration
+        env:
+          DATABASE_URL: postgresql://postgres:test@localhost:5432/test
+          REDIS_URL: redis://localhost:6379
+      
+      - name: Upload coverage
+        uses: codecov/codecov-action@v3
+
+  # =====================
+  # 3. Security
+  # =====================
+  security:
+    name: Security Scan
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Dependency audit
+        run: pnpm audit --audit-level=high
+      
+      - name: Snyk scan
+        uses: snyk/actions/node@master
+        env:
+          SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
+      
+      - name: Detect secrets
+        uses: trufflesecurity/trufflehog@main
+        with:
+          path: ./
+          base: ${{ github.event.repository.default_branch }}
+      
+      - name: SAST with Semgrep
+        uses: returntocorp/semgrep-action@v1
+        with:
+          config: p/owasp-top-ten
+
+  # =====================
+  # 4. Build Image
+  # =====================
+  build:
+    name: Build Image
+    needs: [quality, test, security]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    
+    outputs:
+      image: ${{ steps.meta.outputs.tags }}
+      digest: ${{ steps.build.outputs.digest }}
+    
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+      
+      - name: Set up Buildx
+        uses: docker/setup-buildx-action@v3
+      
+      - name: Login to Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      
+      - name: Extract metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          tags: |
+            type=ref,event=branch
+            type=ref,event=pr
+            type=semver,pattern={{version}}
+            type=sha,format=long
+      
+      - name: Build and push
+        id: build
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          push: true
+          platforms: linux/amd64,linux/arm64
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+      
+      - name: Scan image
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: ${{ steps.meta.outputs.tags }}
+          format: 'sarif'
+          output: 'trivy-results.sarif'
+          severity: 'CRITICAL,HIGH'
+          exit-code: '1'
+      
+      - name: Sign image
+        run: |
+          cosign sign --yes ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}@${{ steps.build.outputs.digest }}
+        env:
+          COSIGN_EXPERIMENTAL: 1
+
+  # =====================
+  # 5. Deploy Staging
+  # =====================
+  deploy-staging:
+    name: Deploy to Staging
+    needs: build
+    if: github.ref == 'refs/heads/develop'
+    runs-on: ubuntu-latest
+    environment:
+      name: staging
+      url: https://staging.myapp.com
+    
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Setup kubectl
+        uses: azure/setup-kubectl@v3
+      
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_DEPLOY_ROLE }}
+          aws-region: me-south-1
+      
+      - name: Update kubeconfig
+        run: aws eks update-kubeconfig --name staging-cluster
+      
+      - name: Deploy with Helm
+        run: |
+          helm upgrade --install myapp ./helm/myapp \
+            --namespace staging \
+            --set image.tag=${{ github.sha }} \
+            --values ./helm/myapp/values.staging.yaml \
+            --wait \
+            --timeout 5m
+      
+      - name: Run smoke tests
+        run: ./scripts/smoke-tests.sh https://staging.myapp.com
+
+  # =====================
+  # 6. Deploy Production
+  # =====================
+  deploy-production:
+    name: Deploy to Production
+    needs: build
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    environment:
+      name: production
+      url: https://api.myapp.com
+    
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Deploy Canary (10%)
+        run: |
+          helm upgrade --install myapp-canary ./helm/myapp \
+            --namespace production \
+            --set image.tag=${{ github.sha }} \
+            --set canary.enabled=true \
+            --set canary.weight=10
+      
+      - name: Monitor canary (10 minutes)
+        run: |
+          ./scripts/monitor-canary.sh --duration 600 --threshold-error-rate 1
+      
+      - name: Promote to 50%
+        run: |
+          helm upgrade myapp-canary ./helm/myapp \
+            --reuse-values \
+            --set canary.weight=50
+      
+      - name: Monitor (5 minutes)
+        run: |
+          ./scripts/monitor-canary.sh --duration 300 --threshold-error-rate 1
+      
+      - name: Full deployment
+        run: |
+          helm upgrade --install myapp ./helm/myapp \
+            --namespace production \
+            --set image.tag=${{ github.sha }} \
+            --values ./helm/myapp/values.production.yaml \
+            --wait
+      
+      - name: Cleanup canary
+        run: helm uninstall myapp-canary --namespace production
+      
+      - name: Notify team
+        uses: 8398a7/action-slack@v3
+        with:
+          status: ${{ job.status }}
+          fields: repo,message,commit,author,action
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK }}
+```
+
+### 14.2 Reusable Workflows
+
+```yaml
+# .github/workflows/reusable-deploy.yml
+name: Reusable Deploy
+
+on:
+  workflow_call:
+    inputs:
+      environment:
+        required: true
+        type: string
+      image_tag:
+        required: true
+        type: string
+    secrets:
+      kube_config:
+        required: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Deploy
+        run: |
+          echo "Deploying ${{ inputs.image_tag }} to ${{ inputs.environment }}"
+```
+
+### 14.3 Matrix Strategy
+
+```yaml
+test:
+  strategy:
+    matrix:
+      os: [ubuntu-latest, macos-latest, windows-latest]
+      node: [18, 20, 22]
+  runs-on: ${{ matrix.os }}
+  steps:
+    - uses: actions/setup-node@v4
+      with:
+        node-version: ${{ matrix.node }}
+```
+
+---
+
+## 15. GitOps (ArgoCD)
+
+### 15.1 الفكرة
+
+> **Git = Source of Truth. الـ cluster يتزامن تلقائياً مع ما في Git.**
+
+```
+المطور يعدّل YAML
+   ▼
+يدفع لـ Git
+   ▼
+ArgoCD يكتشف
+   ▼
+ArgoCD يطبّق على الـ Cluster
+   ▼
+الـ Cluster يطابق Git دائماً
+```
+
+### 15.2 ArgoCD Application
+
+```yaml
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: myapp-production
+  namespace: argocd
+spec:
+  project: default
+  
+  source:
+    repoURL: https://github.com/myorg/myapp-config
+    targetRevision: main
+    path: production
+    
+    helm:
+      valueFiles:
+        - values.production.yaml
+  
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: production
+  
+  syncPolicy:
+    automated:
+      prune: true              # حذف ما لم يعد في Git
+      selfHeal: true           # إصلاح أي تغيير يدوي
+    
+    syncOptions:
+      - CreateNamespace=true
+      - PrunePropagationPolicy=foreground
+    
+    retry:
+      limit: 5
+      backoff:
+        duration: 5s
+        factor: 2
+        maxDuration: 3m
+```
+
+### 15.3 ApplicationSet للـ Multi-Environment
+
+```yaml
+apiVersion: argoproj.io/v1alpha1
+kind: ApplicationSet
+metadata:
+  name: myapp-environments
+spec:
+  generators:
+    - list:
+        elements:
+          - env: dev
+            replicas: "1"
+          - env: staging
+            replicas: "3"
+          - env: production
+            replicas: "10"
+  
+  template:
+    metadata:
+      name: 'myapp-{{env}}'
+    spec:
+      source:
+        repoURL: https://github.com/myorg/myapp-config
+        path: '{{env}}'
+        helm:
+          parameters:
+            - name: replicaCount
+              value: '{{replicas}}'
+      destination:
+        namespace: '{{env}}'
+```
+
+---
+
+## 16. Database Migrations في الإنتاج
+
+### 16.1 الخطر
+
+> **migration واحد سيء = توقف 6 ساعات.**
+
+### 16.2 القواعد الذهبية
+
+```
+1. Migrations يجب أن تكون backward compatible
+2. لا تحذف عمود مباشرة → mark deprecated → احذف لاحقاً
+3. لا تُعد تسمية عمود → أضف جديد، انسخ، احذف القديم
+4. لا تُقفل جدول كبير → استخدم online migration
+5. لكل migration يجب أن يكون له rollback
+6. اختبر على نسخة من الإنتاج أولاً
+```
+
+### 16.3 Migration Pattern: Expand-Contract
+
+```
+أردنا تغيير عمود `name` إلى `full_name`:
+
+❌ خطر:
+ALTER TABLE users RENAME COLUMN name TO full_name;
+(يكسر التطبيق القديم)
+
+✓ آمن (3 مراحل):
+
+Phase 1: Expand
+  ALTER TABLE users ADD COLUMN full_name VARCHAR;
+  UPDATE users SET full_name = name;
+  CREATE TRIGGER sync_names ... (يُبقي الاثنين متزامنين)
+  
+  Deploy code يستخدم كليهما (read both, write both)
+
+Phase 2: Migrate
+  Deploy code يكتب لـ full_name فقط، يقرأ من full_name
+  
+Phase 3: Contract
+  DROP TRIGGER sync_names;
+  ALTER TABLE users DROP COLUMN name;
+```
+
+### 16.4 أدوات
+
+- **Flyway** (Java/SQL)
+- **Liquibase** (XML/SQL/YAML)
+- **Prisma Migrate** (Node)
+- **Alembic** (Python)
+- **golang-migrate** (Go)
+
+### 16.5 مثال بـ Prisma
+
+```typescript
+// prisma/schema.prisma
+model User {
+  id        String   @id @default(uuid())
+  email     String   @unique
+  full_name String?  @map("full_name")
+  
+  @@index([email])
+}
+```
+
+```bash
+# 1. توليد migration
+pnpm prisma migrate dev --name add_full_name
+
+# 2. في CI، تطبيق على staging
+pnpm prisma migrate deploy
+
+# 3. في الإنتاج (مع لقطة backup قبل)
+./scripts/backup-and-migrate.sh
+```
+
+### 16.6 Zero-Downtime Migration Script
+
+```bash
+#!/bin/bash
+set -e
+
+# 1. Backup قبل أي شيء
+echo "Creating backup..."
+pg_dump $DATABASE_URL > /backups/pre-migration-$(date +%s).sql
+
+# 2. تحقق من حجم العمليات
+echo "Estimating migration impact..."
+psql $DATABASE_URL -c "EXPLAIN $(cat migration.sql)"
+
+# 3. تطبيق بـ statement_timeout
+PGSTATEMENT_TIMEOUT=300000 \  # 5 دقائق max
+psql $DATABASE_URL -f migration.sql
+
+# 4. تحقق
+psql $DATABASE_URL -c "SELECT * FROM schema_migrations ORDER BY id DESC LIMIT 1;"
+
+# 5. لو فشل، rollback تلقائي
+# (لأن psql ينفذ في transaction by default)
+```
+
+---
+
+## 17-19. Deployment Strategies
+
+### 17. Zero-Downtime Deployments
+
+#### Rolling Update (Default في K8s)
+
+```
+Old: [v1] [v1] [v1] [v1]
+            ↓
+     [v1] [v1] [v1] [v2]
+            ↓
+     [v1] [v1] [v2] [v2]
+            ↓
+     [v1] [v2] [v2] [v2]
+            ↓
+New: [v2] [v2] [v2] [v2]
+```
+
+**شرط أساسي**: التطبيق يدعم Graceful Shutdown.
+
+```typescript
+// graceful shutdown
+const server = app.listen(3000);
+
+let isShuttingDown = false;
+
+process.on('SIGTERM', async () => {
+  console.log('SIGTERM received, starting graceful shutdown');
+  isShuttingDown = true;
+  
+  // 1. توقف عن قبول طلبات جديدة
+  server.close();
+  
+  // 2. أنه الطلبات الحالية
+  await waitForActiveRequests();
+  
+  // 3. أغلق الاتصالات
+  await db.close();
+  await redis.disconnect();
+  
+  // 4. خرج
+  process.exit(0);
+});
+
+// Health check يعكس الحالة
+app.get('/ready', (req, res) => {
+  if (isShuttingDown) return res.status(503).send('shutting down');
+  res.send('ready');
+});
+```
+
+### 18. Blue-Green Deployment
+
+```
+Blue (current production)        Green (new version)
+[v1] [v1] [v1]                  [v2] [v2] [v2]
+       ▲                                ▲
+       │                                │
+       └────── Load Balancer ──────────┘
+                    │
+                    │ يوجّه 100% لـ Blue
+                    │
+                    │ test Green ✓
+                    │
+                    │ يحوّل 100% لـ Green
+                    │
+              [الآن Green هو الإنتاج]
+              [Blue يصبح standby]
+```
+
+**الميزة**: rollback فوري (تحويل LB مرة أخرى).
+
+```yaml
+# K8s Service يوجّه لـ deployment محدد
+apiVersion: v1
+kind: Service
+metadata:
+  name: myapp
+spec:
+  selector:
+    app: myapp
+    version: blue          # يتغير لـ green عند النشر
+  ports:
+    - port: 80
+      targetPort: 3000
+```
+
+### 19. Canary Releases
+
+```
+أرسل 1% من traffic للنسخة الجديدة
+    ▼
+راقب 10 دقائق
+    ▼
+لو OK → ارفع لـ 10%
+    ▼
+راقب 30 دقيقة
+    ▼
+لو OK → ارفع لـ 50%
+    ▼
+راقب 1 ساعة
+    ▼
+لو OK → 100%
+    ▼
+لو خطأ في أي مرحلة → rollback فوري
+```
+
+```yaml
+# Flagger - Canary تلقائي
+apiVersion: flagger.app/v1beta1
+kind: Canary
+metadata:
+  name: myapp
+spec:
+  targetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: myapp
+  
+  progressDeadlineSeconds: 600
+  
+  service:
+    port: 80
+  
+  analysis:
+    interval: 1m
+    threshold: 5             # 5 محاولات فاشلة = rollback
+    maxWeight: 50
+    stepWeight: 10           # 0% → 10% → 20% → ...
+    
+    metrics:
+      - name: request-success-rate
+        thresholdRange:
+          min: 99
+        interval: 1m
+      
+      - name: request-duration
+        thresholdRange:
+          max: 500          # ms
+        interval: 30s
+    
+    webhooks:
+      - name: load-test
+        url: http://load-tester/
+        timeout: 5s
+        metadata:
+          cmd: "hey -z 1m -c 10 http://myapp/"
+```
+
+---
+
+## 20. Feature Flags
+
+### 20.1 الفكرة
+
+> **انشر الكود لكن لا تُفعّل الميزة. شغّلها لـ 5% من المستخدمين أولاً.**
+
+### 20.2 أنواع Feature Flags
+
+```
+1. Release toggles    → كود جديد، مغلق
+2. Experiment toggles → A/B testing
+3. Ops toggles        → تعطيل خدمة عند overload
+4. Permission toggles → ميزات لـ premium users
+```
+
+### 20.3 Implementation
+
+```typescript
+// مع LaunchDarkly / Unleash / OpenFeature
+import { client } from './feature-flags';
+
+async function calculateInvoiceTotal(invoice: Invoice) {
+  const useNewEngine = await client.isEnabled('new-pricing-engine', {
+    userId: invoice.userId,
+    tenantId: invoice.tenantId,
+    customAttributes: {
+      planType: invoice.tenant.plan,
+      country: invoice.tenant.country
+    }
+  });
+  
+  if (useNewEngine) {
+    return await newPricingEngine.calculate(invoice);
+  } else {
+    return await legacyPricingEngine.calculate(invoice);
+  }
+}
+```
+
+### 20.4 Self-Hosted Flag Service
+
+```typescript
+// خدمة بسيطة بـ Redis
+class FeatureFlagService {
+  async isEnabled(flag: string, context: Context): Promise<boolean> {
+    const config = await this.getFlagConfig(flag);
+    
+    if (!config.enabled) return false;
+    
+    // Targeted users
+    if (config.targetedUsers.includes(context.userId)) return true;
+    
+    // Percentage rollout (consistent hashing)
+    const hash = crc32(`${flag}-${context.userId}`);
+    const userPercentage = hash % 100;
+    
+    return userPercentage < config.rolloutPercentage;
+  }
+}
+```
+
+### 20.5 Best Practices
+
+```
+1. كل flag له تاريخ انتهاء (لتنظيفه)
+2. وثّق كل flag (لماذا، من أنشأه، متى ينتهي)
+3. لا تستخدم flags كـ if/else دائم → مديونية تقنية
+4. اختبر كل المسارات (مع flag مفعل + معطل)
+5. راقب الـ flags في الـ logs
+```
+
+---
+
+## 21. A/B Testing Infrastructure
+
+### 21.1 الفكرة
+
+```
+50% من المستخدمين → نسخة A (control)
+50% من المستخدمين → نسخة B (treatment)
+
+نقيس: أيهما يحقق نتائج أفضل (نسبة شراء، وقت بقاء، إلخ)
+```
+
+### 21.2 المكونات
+
+```
+1. Assignment Service  → يحدد user أي variant
+2. Tracking Service    → يسجل الأحداث
+3. Analytics           → تحليل النتائج
+4. Statistical Engine  → هل النتائج significant؟
+```
+
+### 21.3 Implementation
+
+```typescript
+class ABTestingService {
+  async getVariant(experimentId: string, userId: string): Promise<string> {
+    const experiment = await this.getExperiment(experimentId);
+    
+    if (!experiment.active) return 'control';
+    
+    // Consistent assignment (نفس المستخدم = نفس variant دائماً)
+    const hash = crc32(`${experimentId}-${userId}`);
+    const bucket = hash % 100;
+    
+    let cumulative = 0;
+    for (const variant of experiment.variants) {
+      cumulative += variant.percentage;
+      if (bucket < cumulative) {
+        // Track assignment
+        await this.trackEvent('experiment.assigned', {
+          experimentId,
+          variant: variant.name,
+          userId
+        });
+        return variant.name;
+      }
+    }
+    
+    return 'control';
+  }
+  
+  async trackConversion(experimentId: string, userId: string, metric: string, value: number) {
+    await this.trackEvent('experiment.conversion', {
+      experimentId,
+      userId,
+      metric,
+      value
+    });
+  }
+  
+  async analyzeResults(experimentId: string): Promise<AnalysisResult> {
+    const results = await this.fetchResults(experimentId);
+    
+    // Chi-square test أو t-test
+    const significance = this.calculateSignificance(results);
+    
+    return {
+      winner: significance.winner,
+      confidence: significance.confidence,
+      sampleSize: results.sampleSize,
+      isSignificant: significance.confidence > 0.95
+    };
+  }
+}
+```
+
+---
+
+## 22-23. Multi-Region & CDN
+
+### 22.1 Multi-Region Architecture
+
+```
+        ┌──── User in Riyadh ────┐
+        │                         │
+        ▼                         ▼
+   [CloudFront]              [Route 53]
+   Static Assets             Geo-DNS
+        │                         │
+        │                         ▼
+        │              ┌──── Middle East ────┐
+        │              │                      │
+        │              ▼                      ▼
+        │         [ALB - Riyadh]      [ALB - Bahrain]
+        │              │                      │
+        │              ▼                      ▼
+        │         [EKS Cluster]        [EKS Cluster]
+        │              │                      │
+        │              ▼                      ▼
+        │         [RDS Primary] ─────► [RDS Replica]
+        │                                     ▲
+        │                                     │
+        └─────────────────────────────────────┘
+                        Failover if Riyadh down
+```
+
+### 22.2 Read/Write Splitting
+
+```typescript
+class DatabaseRouter {
+  private writeDb = new Pool({ host: 'primary.db.aws.com' });
+  private readDbs = [
+    new Pool({ host: 'replica-1.db.aws.com' }),
+    new Pool({ host: 'replica-2.db.aws.com' }),
+    new Pool({ host: 'replica-3.db.aws.com' })
+  ];
+  
+  async write(query: string, params: any[]) {
+    return await this.writeDb.query(query, params);
+  }
+  
+  async read(query: string, params: any[]) {
+    // Round-robin
+    const replica = this.readDbs[Math.floor(Math.random() * this.readDbs.length)];
+    return await replica.query(query, params);
+  }
+}
+```
+
+### 23. CDN & Edge Computing
+
+#### CDN Strategy
+
+```
+Static Assets (images, CSS, JS):
+  → CloudFront / Cloudflare
+  → Cache forever (with versioned URLs)
+  → 99% hit rate
+
+API Responses:
+  → Cache GETs (with proper headers)
+  → Cache-Control: public, max-age=300
+  → CDN-Cache-Control: s-maxage=3600
+  → Stale-while-revalidate
+
+Dynamic Content:
+  → No cache
+  → Direct to origin
+```
+
+#### Edge Functions
+
+```typescript
+// Cloudflare Worker - يعمل في 300+ موقع حول العالم
+export default {
+  async fetch(request: Request): Promise<Response> {
+    // Geolocation
+    const country = request.cf.country;
+    
+    // A/B test at edge
+    const variant = await getVariant(request);
+    
+    // Rate limiting at edge
+    if (await isRateLimited(request)) {
+      return new Response('Too many requests', { status: 429 });
+    }
+    
+    // Bot detection
+    if (await isBot(request)) {
+      return new Response('Bot detected', { status: 403 });
+    }
+    
+    // Forward to origin
+    return fetch(request);
+  }
+};
+```
+
+---
+
+## 24. Monitoring (Prometheus + Grafana)
+
+### 24.1 الفلسفة: Four Golden Signals
+
+```
+1. Latency        → كم يستغرق الطلب؟
+2. Traffic        → كم عدد الطلبات؟
+3. Errors         → كم نسبة الأخطاء؟
+4. Saturation     → كم استخدام الموارد؟
+```
+
+### 24.2 Prometheus
+
+#### Architecture
+
+```
+[App] ──exposes /metrics──→ [Prometheus]
+                                   │
+                                   │ scrapes every 15s
+                                   │ stores in TSDB
+                                   ▼
+                              [Grafana]
+                              [AlertManager]
+```
+
+#### Instrument الـ App
+
+```typescript
+import { Counter, Histogram, register } from 'prom-client';
+
+// Counters
+const httpRequestsTotal = new Counter({
+  name: 'http_requests_total',
+  help: 'Total HTTP requests',
+  labelNames: ['method', 'route', 'status']
+});
+
+// Histograms
+const httpRequestDuration = new Histogram({
+  name: 'http_request_duration_seconds',
+  help: 'HTTP request duration',
+  labelNames: ['method', 'route', 'status'],
+  buckets: [0.01, 0.05, 0.1, 0.5, 1, 2, 5, 10]
+});
+
+// Business metrics
+const invoicesCreated = new Counter({
+  name: 'invoices_created_total',
+  help: 'Total invoices created',
+  labelNames: ['tenant_id', 'invoice_type']
+});
+
+const invoiceAmount = new Histogram({
+  name: 'invoice_amount',
+  help: 'Invoice amounts',
+  labelNames: ['tenant_id', 'currency'],
+  buckets: [10, 100, 1000, 10000, 100000]
+});
+
+// Middleware
+app.use((req, res, next) => {
+  const start = Date.now();
+  
+  res.on('finish', () => {
+    const duration = (Date.now() - start) / 1000;
+    
+    httpRequestsTotal.inc({
+      method: req.method,
+      route: req.route?.path || 'unknown',
+      status: res.statusCode
+    });
+    
+    httpRequestDuration.observe(
+      { method: req.method, route: req.route?.path, status: res.statusCode },
+      duration
+    );
+  });
+  
+  next();
+});
+
+// Endpoint للـ scraping
+app.get('/metrics', async (req, res) => {
+  res.set('Content-Type', register.contentType);
+  res.end(await register.metrics());
+});
+```
+
+#### Prometheus Config
+
+```yaml
+# prometheus.yml
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+
+alerting:
+  alertmanagers:
+    - static_configs:
+        - targets: ['alertmanager:9093']
+
+rule_files:
+  - 'alerts/*.yml'
+
+scrape_configs:
+  - job_name: 'kubernetes-pods'
+    kubernetes_sd_configs:
+      - role: pod
+    relabel_configs:
+      - source_labels: [__meta_kubernetes_pod_annotation_prometheus_io_scrape]
+        action: keep
+        regex: true
+      - source_labels: [__meta_kubernetes_pod_annotation_prometheus_io_path]
+        action: replace
+        target_label: __metrics_path__
+        regex: (.+)
+```
+
+#### PromQL Queries
+
+```promql
+# Average request duration in last 5 minutes
+rate(http_request_duration_seconds_sum[5m]) / rate(http_request_duration_seconds_count[5m])
+
+# 95th percentile latency
+histogram_quantile(0.95, rate(http_request_duration_seconds_bucket[5m]))
+
+# Error rate
+sum(rate(http_requests_total{status=~"5.."}[5m])) / sum(rate(http_requests_total[5m]))
+
+# Requests per second by endpoint
+sum(rate(http_requests_total[1m])) by (route)
+
+# Invoices created per tenant
+sum(rate(invoices_created_total[1h])) by (tenant_id)
+
+# Memory usage by pod
+container_memory_usage_bytes{namespace="production"}
+```
+
+### 24.3 Grafana Dashboards
+
+```json
+{
+  "dashboard": {
+    "title": "MyApp - Production",
+    "panels": [
+      {
+        "title": "Request Rate",
+        "targets": [
+          { "expr": "sum(rate(http_requests_total[1m])) by (route)" }
+        ]
+      },
+      {
+        "title": "Error Rate",
+        "targets": [
+          { "expr": "sum(rate(http_requests_total{status=~\"5..\"}[5m]))" }
+        ]
+      },
+      {
+        "title": "P95 Latency",
+        "targets": [
+          { "expr": "histogram_quantile(0.95, rate(http_request_duration_seconds_bucket[5m]))" }
+        ]
+      },
+      {
+        "title": "Active Users",
+        "targets": [
+          { "expr": "sum(active_users_total)" }
+        ]
+      }
+    ]
+  }
+}
+```
+
+---
+
+## 25. Logging (ELK / Loki)
+
+### 25.1 ELK Stack
+
+```
+[App logs] → [Filebeat] → [Logstash] → [Elasticsearch] → [Kibana]
+```
+
+#### Structured Logging
+
+```typescript
+import winston from 'winston';
+
+const logger = winston.createLogger({
+  level: 'info',
+  format: winston.format.combine(
+    winston.format.timestamp(),
+    winston.format.errors({ stack: true }),
+    winston.format.json()
+  ),
+  defaultMeta: {
+    service: 'myapp-api',
+    version: process.env.APP_VERSION,
+    environment: process.env.NODE_ENV
+  },
+  transports: [
+    new winston.transports.Console()
+  ]
+});
+
+// كل log entry = JSON structured
+logger.info('Invoice created', {
+  tenant_id: 'abc-123',
+  invoice_id: 'inv-456',
+  amount: 1500,
+  currency: 'YER',
+  duration_ms: 234,
+  trace_id: req.traceId
+});
+```
+
+### 25.2 Loki (الأخف والأكفأ)
+
+```yaml
+# Loki + Promtail
+# Promtail يجمع logs من كل pods ويُرسلها لـ Loki
+# Loki يخزّنها (بدون indexing كامل = أرخص)
+# نستعلم عبر Grafana
+
+# LogQL queries
+{namespace="production", app="myapp"} |= "error"
+{namespace="production"} | json | invoice_id = "inv-123"
+```
+
+---
+
+## 26. Distributed Tracing (OpenTelemetry)
+
+### 26.1 المشكلة
+
+```
+طلب واحد يمر بـ 10 خدمات:
+Frontend → API Gateway → Auth → User Service → Invoice Service → DB → Payment → Email → Audit → Response
+
+أين الـ bottleneck؟ أي خدمة فشلت؟
+```
+
+### 26.2 الحل: Distributed Tracing
+
+```
+Trace ID: abc-123 (الطلب كاملاً)
+  Span 1: API Gateway (10ms)
+    Span 2: Auth (5ms)
+    Span 3: Invoice Service (200ms)  ← bottleneck!
+      Span 4: DB Query (180ms)
+      Span 5: Payment (15ms)
+    Span 6: Audit (3ms)
+```
+
+### 26.3 OpenTelemetry
+
+```typescript
+import { NodeSDK } from '@opentelemetry/sdk-node';
+import { getNodeAutoInstrumentations } from '@opentelemetry/auto-instrumentations-node';
+import { OTLPTraceExporter } from '@opentelemetry/exporter-trace-otlp-http';
+
+const sdk = new NodeSDK({
+  serviceName: 'myapp-api',
+  traceExporter: new OTLPTraceExporter({
+    url: 'http://otel-collector:4318/v1/traces'
+  }),
+  instrumentations: [
+    getNodeAutoInstrumentations({
+      '@opentelemetry/instrumentation-fs': { enabled: false }
+    })
+  ]
+});
+
+sdk.start();
+
+// Custom spans
+import { trace } from '@opentelemetry/api';
+
+const tracer = trace.getTracer('myapp');
+
+async function createInvoice(data: InvoiceData) {
+  const span = tracer.startSpan('createInvoice', {
+    attributes: {
+      'invoice.tenant_id': data.tenantId,
+      'invoice.amount': data.amount
+    }
+  });
+  
+  try {
+    // ... business logic
+    
+    span.setStatus({ code: SpanStatusCode.OK });
+    return result;
+  } catch (err) {
+    span.recordException(err);
+    span.setStatus({ code: SpanStatusCode.ERROR });
+    throw err;
+  } finally {
+    span.end();
+  }
+}
+```
+
+### 26.4 Visualization
+
+- **Jaeger** - الأكثر شعبية
+- **Zipkin** - بسيط
+- **Tempo** - من Grafana
+- **Datadog APM** - مدفوع لكن ممتاز
+
+---
+
+## 27. Alerting (AlertManager + PagerDuty)
+
+### 27.1 Alert Rules
+
+```yaml
+# alerts/api.yml
+groups:
+  - name: api_alerts
+    rules:
+      - alert: HighErrorRate
+        expr: |
+          (sum(rate(http_requests_total{status=~"5.."}[5m])) 
+          / sum(rate(http_requests_total[5m]))) > 0.05
+        for: 5m
+        labels:
+          severity: critical
+          team: backend
+        annotations:
+          summary: "High error rate detected"
+          description: "Error rate is {{ $value | humanizePercentage }} for {{ $labels.service }}"
+          runbook: "https://wiki.myapp.com/runbooks/high-error-rate"
+      
+      - alert: HighLatency
+        expr: |
+          histogram_quantile(0.95, 
+            rate(http_request_duration_seconds_bucket[5m])
+          ) > 1
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "P95 latency exceeds 1s"
+      
+      - alert: PodCrashLooping
+        expr: |
+          rate(kube_pod_container_status_restarts_total[15m]) > 0
+        for: 5m
+        labels:
+          severity: critical
+      
+      - alert: DiskAlmostFull
+        expr: |
+          (node_filesystem_avail_bytes / node_filesystem_size_bytes) < 0.1
+        for: 10m
+        labels:
+          severity: warning
+```
+
+### 27.2 AlertManager Routing
+
+```yaml
+route:
+  receiver: 'default'
+  group_by: ['alertname', 'cluster']
+  group_wait: 30s
+  group_interval: 5m
+  repeat_interval: 4h
+  
+  routes:
+    - match:
+        severity: critical
+      receiver: pagerduty
+      continue: true
+    
+    - match:
+        team: backend
+      receiver: backend-slack
+    
+    - match:
+        team: frontend
+      receiver: frontend-slack
+
+receivers:
+  - name: 'default'
+    slack_configs:
+      - api_url: 'https://hooks.slack.com/...'
+        channel: '#alerts'
+  
+  - name: 'pagerduty'
+    pagerduty_configs:
+      - service_key: 'xxx'
+        description: '{{ .CommonAnnotations.summary }}'
+  
+  - name: 'backend-slack'
+    slack_configs:
+      - channel: '#backend-alerts'
+        title: '{{ .CommonAnnotations.summary }}'
+        text: '{{ .CommonAnnotations.description }}'
+```
+
+### 27.3 On-Call Rotation
+
+```
+PagerDuty Schedule:
+  Week 1: Engineer A (primary), Engineer B (backup)
+  Week 2: Engineer C (primary), Engineer D (backup)
+  Week 3: Engineer B (primary), Engineer A (backup)
+  ...
+
+Escalation:
+  1. Notify primary (page)
+  2. If no ack in 5 min → notify backup
+  3. If no ack in 10 min → notify team lead
+  4. If no ack in 15 min → notify CTO
+```
+
+---
+
+## 28. SLO/SLI/SLA Management
+
+### 28.1 المفاهيم
+
+```
+SLI (Service Level Indicator):
+  ما نقيسه فعلياً
+  مثال: نسبة الطلبات الناجحة
+  
+SLO (Service Level Objective):
+  هدفنا الداخلي
+  مثال: 99.9% من الطلبات تنجح
+  
+SLA (Service Level Agreement):
+  التعهد للعميل (مع غرامات)
+  مثال: 99.5% uptime، أو نُعوّض
+
+دائماً: SLA < SLO < فعلي
+```
+
+### 28.2 Error Budget
+
+```
+SLO = 99.9% → Error budget = 0.1%
+  = 43.8 دقيقة توقف مسموح/شهر
+  
+لو استهلكنا 30 دقيقة → باقي 13.8 دقيقة
+  → نتوقف عن نشر features جديدة
+  → نركز على الـ reliability
+
+لو لم نستهلك شيئاً → نستطيع المخاطرة أكثر
+  → نشر features جريئة
+```
+
+### 28.3 Tracking
+
+```promql
+# SLI: نسبة الطلبات الناجحة في الشهر
+sum(rate(http_requests_total{status!~"5.."}[30d])) 
+/ sum(rate(http_requests_total[30d]))
+
+# Error budget remaining
+1 - ((1 - 0.999) - (1 - sli)) / (1 - 0.999)
+```
+
+---
+
+## 29. Cost Optimization (FinOps)
+
+### 29.1 المشكلة
+
+```
+شركة استارت أب: $50/شهر AWS
+نمو ✓
+شركة كبيرة: $500,000/شهر AWS
+
+50% من هذا يمكن توفيره بإدارة جيدة!
+```
+
+### 29.2 الاستراتيجيات
+
+#### Right-Sizing
+```
+Instance بـ 16 GB RAM، يستخدم 4 GB فقط؟
+  → انزل لـ 8 GB
+  → وفّر 50%
+```
+
+#### Reserved Instances / Savings Plans
+```
+On-Demand:        $100/month
+1-year Reserved:  $65/month  (35% توفير)
+3-year Reserved:  $40/month  (60% توفير)
+
+للأحمال الثابتة فقط.
+```
+
+#### Spot Instances
+```
+70-90% أرخص من On-Demand
+لكن يمكن أن تُسحب في أي وقت
+
+مثالية لـ:
+- Batch processing
+- CI/CD workers
+- Dev environments
+- Stateless workloads
+```
+
+#### Auto-Scaling Down
+```
+Office hours (9-5): 10 instances
+Night/Weekend: 2 instances
+وفّر 60%
+```
+
+#### Storage Tiers
+```
+S3 Standard:        $0.023/GB
+S3 Standard-IA:     $0.0125/GB   (للوصول النادر)
+S3 Glacier:         $0.004/GB    (للأرشيف)
+S3 Deep Archive:    $0.00099/GB  (لسنوات)
+
+لكل بيانات: ضع policy تنقلها تلقائياً
+```
+
+#### Spot for Kubernetes
+```yaml
+# Node group بـ spot instances
+nodeGroups:
+  - name: spot-workers
+    instanceType: t3.medium
+    spot: true
+    minSize: 0
+    maxSize: 50
+    
+    taints:
+      - key: spot
+        value: "true"
+        effect: NO_SCHEDULE
+    
+    # K8s يجدوّل pods آمنة هنا فقط
+```
+
+### 29.3 Cost Visibility
+
+```
+أدوات:
+- AWS Cost Explorer
+- CloudHealth
+- Spot.io
+- Kubecost (لـ K8s)
+
+Tagging Strategy:
+  كل resource له tags:
+    Environment: production
+    Team: backend
+    Project: invoicing
+    CostCenter: 12345
+  
+  ثم نُولّد تقارير: من يصرف كم على ماذا
+```
+
+### 29.4 Monthly Cost Review
+
+```
+كل شهر:
+1. Top 10 services من حيث التكلفة
+2. أكبر زيادة عن الشهر السابق
+3. Idle resources (لا تُستخدم)
+4. Untagged resources
+5. توصيات Cost Explorer
+```
+
+---
+
+## 30. Chaos Engineering
+
+### 30.1 الفكرة
+
+> **اكسر النظام عمداً في الإنتاج. تأكد أنه يصمد. لو لم يصمد، أصلحه قبل أن يحدث بالصدفة.**
+
+ابتكرتها Netflix بـ Chaos Monkey.
+
+### 30.2 المبادئ
+
+```
+1. ابدأ بـ steady state - حدد كيف يبدو "صحي"
+2. فرضية - ماذا تتوقع لو حدث X؟
+3. ابدأ صغيراً - بيئة dev أولاً
+4. توسع تدريجياً - staging ثم production
+5. أتمت - تجارب يومية
+6. تعلم - وثّق كل failure
+```
+
+### 30.3 أنواع التجارب
+
+```
+1. Resource Exhaustion
+   - استهلك 90% CPU
+   - استهلك 90% Memory
+   - استهلك 90% Disk
+   - استهلك 90% Network
+
+2. Network
+   - أضف latency
+   - أسقط packets
+   - قطع الاتصال بين خدمات
+
+3. Application
+   - رد بـ 500 errors
+   - تأخير الردود
+   - أرسل بيانات مكسورة
+
+4. Infrastructure
+   - أوقف instance
+   - أوقف availability zone
+   - أوقف region
+
+5. Time
+   - غيّر الوقت في النظام
+   - clock skew بين السيرفرات
+```
+
+### 30.4 أدوات
+
+- **Chaos Mesh** - الأفضل لـ K8s
+- **Litmus** - K8s
+- **Gremlin** - مُدار
+- **AWS Fault Injection Simulator**
+
+### 30.5 مثال: Chaos Mesh
+
+```yaml
+# Pod failure - قتل random pod كل 10 دقائق
+apiVersion: chaos-mesh.org/v1alpha1
+kind: PodChaos
+metadata:
+  name: random-pod-killer
+spec:
+  action: pod-kill
+  mode: random-max-percent
+  value: '20'
+  selector:
+    namespaces:
+      - production
+    labelSelectors:
+      app: myapp
+  scheduler:
+    cron: '*/10 * * * *'
+
+---
+# Network latency
+apiVersion: chaos-mesh.org/v1alpha1
+kind: NetworkChaos
+metadata:
+  name: db-latency
+spec:
+  action: delay
+  mode: all
+  selector:
+    namespaces:
+      - production
+    labelSelectors:
+      app: myapp
+  delay:
+    latency: '100ms'
+    correlation: '100'
+    jitter: '50ms'
+  direction: to
+  target:
+    selector:
+      labelSelectors:
+        app: postgres
+  duration: '10m'
+```
+
+### 30.6 GameDay
+
+```
+كل ربع سنة:
+- اختر سيناريو كارثي (تخيلي)
+  مثال: "Region me-south-1 توقف بالكامل"
+- اجمع الفريق
+- ابدأ التمرين
+- اقتل الـ region فعلاً
+- شاهد كيف يستجيب النظام والفريق
+- وثّق الدروس
+```
+
+---
+
+## 31. Backup & Recovery Automation
+
+### 31.1 3-2-1 Rule
+
+```
+3 نسخ من البيانات (الأصل + 2 backups)
+2 وسائط مختلفة (disk + cloud)
+1 خارج الموقع (off-site)
+```
+
+### 31.2 Automated Backup
+
+```yaml
+# K8s CronJob للـ backup اليومي
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: postgres-backup
+spec:
+  schedule: '0 2 * * *'        # 2 AM كل يوم
+  
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          containers:
+            - name: backup
+              image: postgres:16-alpine
+              command:
+                - /bin/sh
+                - -c
+                - |
+                  set -e
+                  TIMESTAMP=$(date +%Y%m%d_%H%M%S)
+                  
+                  # 1. Backup
+                  pg_dump $DATABASE_URL | gzip > /tmp/backup_$TIMESTAMP.sql.gz
+                  
+                  # 2. Encrypt
+                  openssl enc -aes-256-cbc -salt -pbkdf2 -iter 100000 \
+                    -in /tmp/backup_$TIMESTAMP.sql.gz \
+                    -out /tmp/backup_$TIMESTAMP.sql.gz.enc \
+                    -pass env:BACKUP_PASSWORD
+                  
+                  # 3. Upload to S3
+                  aws s3 cp /tmp/backup_$TIMESTAMP.sql.gz.enc \
+                    s3://backups/postgres/$TIMESTAMP.sql.gz.enc
+                  
+                  # 4. Cross-region replication (تلقائي على S3)
+                  
+                  # 5. Verify
+                  aws s3 ls s3://backups/postgres/$TIMESTAMP.sql.gz.enc
+                  
+                  # 6. Notify
+                  curl -X POST $SLACK_WEBHOOK \
+                    -d "{\"text\": \"Backup completed: $TIMESTAMP\"}"
+          
+          restartPolicy: OnFailure
+```
+
+### 31.3 Backup Testing
+
+> **النسخة الاحتياطية غير المختبرة = لا نسخة.**
+
+```bash
+# كل أسبوع، نختبر الاستعادة
+#!/bin/bash
+
+# 1. أنشئ DB مؤقتة
+createdb test_restore_$(date +%s)
+
+# 2. استعد آخر backup
+LATEST=$(aws s3 ls s3://backups/postgres/ | sort | tail -1 | awk '{print $4}')
+aws s3 cp s3://backups/postgres/$LATEST /tmp/
+
+# 3. فك التشفير
+openssl enc -d -aes-256-cbc -pbkdf2 -iter 100000 \
+  -in /tmp/$LATEST \
+  -out /tmp/backup.sql.gz \
+  -pass env:BACKUP_PASSWORD
+
+# 4. استعد
+gunzip -c /tmp/backup.sql.gz | psql test_restore_$(date +%s)
+
+# 5. تحقق
+psql test_restore -c "SELECT COUNT(*) FROM users;"
+
+# 6. احذف
+dropdb test_restore_$(date +%s)
+
+# 7. أبلغ
+echo "Backup test passed"
+```
+
+---
+
+## 32. Secret Management في CI/CD
+
+### 32.1 القواعد
+
+```
+❌ لا تضع secrets في:
+  - Git
+  - Dockerfile
+  - YAML files
+  - Logs
+  - Environment variables عادية
+
+✓ استخدم:
+  - Vault
+  - AWS Secrets Manager
+  - GitHub Secrets (encrypted)
+  - Sealed Secrets (للـ K8s)
+```
+
+### 32.2 GitHub Secrets
+
+```yaml
+- name: Deploy
+  env:
+    AWS_KEY: ${{ secrets.AWS_ACCESS_KEY }}
+    DB_PASSWORD: ${{ secrets.DB_PASSWORD }}
+  run: ./deploy.sh
+```
+
+### 32.3 OIDC (الأفضل)
+
+بدلاً من تخزين AWS keys في GitHub:
+
+```yaml
+permissions:
+  id-token: write          # لـ OIDC
+
+steps:
+  - name: Configure AWS
+    uses: aws-actions/configure-aws-credentials@v4
+    with:
+      role-to-assume: arn:aws:iam::123:role/GitHubActions
+      aws-region: me-south-1
+      # لا secrets!
+```
+
+### 32.4 Sealed Secrets في K8s
+
+```bash
+# المطور يكتب secret عادي
+echo -n "mypassword" | kubectl create secret generic mysecret --dry-run=client --from-file=password=/dev/stdin -o yaml > secret.yaml
+
+# يُشفّره
+kubeseal -f secret.yaml -w sealed-secret.yaml
+
+# الآن sealed-secret.yaml آمن للـ commit
+# فقط الـ cluster يستطيع فكه
+```
+
+---
+
+## 33. Compliance as Code
+
+### 33.1 الفكرة
+
+> **بدلاً من فحص يدوي للامتثال، اكتب اختبارات تتأكد أن البنية متوافقة.**
+
+### 33.2 أدوات
+
+- **Open Policy Agent (OPA)** - الأقوى
+- **Checkov** - لـ Terraform
+- **kube-bench** - CIS benchmark لـ K8s
+- **Falco** - runtime security
+
+### 33.3 OPA مثال
+
+```rego
+# policy.rego - منع containers بدون resource limits
+package kubernetes.admission
+
+deny[msg] {
+  input.request.kind.kind == "Pod"
+  container := input.request.object.spec.containers[_]
+  not container.resources.limits.memory
+  msg := sprintf("Container %s must have memory limit", [container.name])
+}
+
+deny[msg] {
+  input.request.kind.kind == "Pod"
+  container := input.request.object.spec.containers[_]
+  container.image
+  not startswith(container.image, "myregistry.com/")
+  msg := sprintf("Container %s must use approved registry", [container.name])
+}
+
+deny[msg] {
+  input.request.kind.kind == "Pod"
+  container := input.request.object.spec.containers[_]
+  container.securityContext.privileged == true
+  msg := "Privileged containers not allowed"
+}
+```
+
+### 33.4 Checkov في CI
+
+```yaml
+- name: Run Checkov
+  uses: bridgecrewio/checkov-action@master
+  with:
+    directory: ./terraform
+    framework: terraform
+    check: CKV_AWS_*
+    soft_fail: false        # فشل البناء لو خرق
+```
+
+---
+
+## مخرجات المرحلة الثامنة
+
+أنت الآن تمتلك:
+
+### الأساسيات:
+1. **فلسفة DevOps + SRE** كاملة
+2. **DORA Metrics** للقياس
+3. **Cattle, not Pets** mindset
+
+### Infrastructure as Code:
+4. **Terraform** بنية تحتية كاملة
+5. **Pulumi** كبديل بلغة برمجة
+6. **Ansible** للتكوين
+7. **State Management** آمن
+8. **Modules** قابلة لإعادة الاستخدام
+
+### Containers:
+9. **Docker** بأفضل الممارسات
+10. **Multi-stage builds**
+11. **Docker Compose** للتطوير
+12. **Image scanning**
+13. **Container Registries**
+
+### Orchestration:
+14. **Kubernetes** بكل المكونات
+15. **K3s** للحالات الصغيرة
+16. **Helm Charts** للنشر
+17. **Service Mesh (Istio)**
+18. **mTLS** بين الخدمات
+
+### CI/CD:
+19. **Pipelines** شاملة (Quality → Test → Security → Build → Deploy)
+20. **GitHub Actions** متقدم
+21. **GitOps مع ArgoCD**
+22. **Image signing** (Cosign)
+23. **SAST + DAST** في كل build
+
+### Deployment:
+24. **Zero-Downtime** deployments
+25. **Blue-Green**
+26. **Canary Releases** آلية
+27. **Feature Flags**
+28. **A/B Testing**
+29. **Multi-Region Architecture**
+30. **CDN + Edge Functions**
+
+### Database:
+31. **Zero-Downtime Migrations**
+32. **Expand-Contract Pattern**
+33. **Backup & Recovery** آلي
+
+### Observability:
+34. **Prometheus** للمقاييس
+35. **Grafana** للوحات
+36. **ELK / Loki** للـ logs
+37. **OpenTelemetry** للـ tracing
+38. **Four Golden Signals**
+
+### Reliability:
+39. **AlertManager + PagerDuty**
+40. **On-Call Rotation**
+41. **SLO/SLI/SLA** management
+42. **Error Budgets**
+43. **Chaos Engineering**
+44. **GameDays**
+
+### Cost & Compliance:
+45. **FinOps** strategies
+46. **Spot Instances**
+47. **Right-sizing**
+48. **Compliance as Code (OPA)**
+49. **Sealed Secrets**
+50. **OIDC** بدلاً من keys
+
+---
+
+## ما الذي ينتظرك في المرحلة التاسعة؟
+
+**Phase 9: Testing Strategy - The Complete Guide**
+
+سنبني **استراتيجية اختبار شاملة بمستوى NASA و Microsoft**:
+
+- **Testing Philosophy**: Test Pyramid, Trophy, Diamond
+- **Unit Testing**: Vitest, Jest بالتعمق
+- **TDD (Test-Driven Development)**
+- **BDD (Behavior-Driven Development)** بـ Cucumber
+- **Integration Testing**: testcontainers
+- **API Testing**: Supertest, Postman, REST Assured
+- **Contract Testing**: Pact, Spring Cloud Contract
+- **E2E Testing**: Playwright, Cypress, Selenium
+- **Visual Regression Testing**: Percy, Chromatic
+- **Performance Testing**: K6, JMeter, Gatling
+- **Load Testing & Stress Testing**
+- **Security Testing**: OWASP ZAP, Burp Suite
+- **Penetration Testing** مفصل
+- **Accessibility Testing**: axe, WAVE
+- **Mutation Testing**: Stryker
+- **Property-Based Testing**: fast-check
+- **Snapshot Testing**
+- **Mocking Strategies**: MSW, Sinon
+- **Test Data Management**: Factories, Fixtures
+- **Test Environments**
+- **Flaky Tests** والتعامل معها
+- **Test Coverage**: ما يجب قياسه فعلاً
+- **CI Integration**
+- **Quality Gates**
+- **Test Reporting**: Allure, HTML reports
+- **Chaos Testing**
+- **Game Days**
+- **Compliance Testing**: GDPR, ZATCA
+- **Multi-tenant Testing**
+- **Database Testing**
+
+---
+
+## هل أتابع للمرحلة التاسعة؟
+
+أرسل **"تابع"** أو **"المرحلة 9"**، وسأبدأ بـ **Testing Strategy** بنفس مستوى التفصيل.
+
+> هذه المرحلة المقبلة هي التي تضمن أن **النظام يعمل كما هو متوقع، الآن وفي المستقبل**، حتى بعد آلاف التعديلات.
